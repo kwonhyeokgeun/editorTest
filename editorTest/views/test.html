@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <!--
+    <button id="disconnect_btn" >종료하기</button>
+    <button id="share_start_btn" >화면공유 시작</button>
+    <button id="share_stop_btn" >화면공유 중지</button>
+    <div class="video-box">
+        <div class="user-video-box">
+            <video id="my_video"></video>
+
+        </div>
+        <div class="share-video-box">
+
+        </div>
+    </div>-->
+    <div id="editor_container">
+        <div id="select-container"></div>
+		<div id="editor" ></div>
+	</div>
+
+    <style>
+        #editor_container {
+            width: 100%;
+            height: 700px;
+            background: #222222;
+        }
+        #select-container{
+            height: 50px;
+            width: 100%;
+            background: #5b60f0;
+        }
+
+        #editor {
+            width: 100%;
+            height: 650px;
+        }
+    </style>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/ace/1.1.3/ace.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/css/bootstrap-theme.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.1/js/bootstrap.min.js"></script>
+
+</head>
+<body>
+    
+    <script type="module">
+        import { io } from "https://cdn.socket.io/4.4.1/socket.io.esm.min.js";
+        
+        const socket = io('https://localhost:443', {secure: true, cors: { origin: '*' }});
+        
+
+        const pc_config = {
+            iceServers: [
+                {
+                    urls: "stun:edu.uxis.co.kr"
+                },
+                {
+                    urls: "turn:edu.uxis.co.kr?transport=tcp",
+                            "username": "webrtc",
+                            "credential": "webrtc100!"
+                }
+            ]
+        }
+
+
+        let roomId, myName, numOfUsers=0; 
+        let filename;
+
+        let fileExt="html"
+        let ext_map = {};
+        ext_map["php"] = "php";
+        ext_map["html"] = "html";
+        ext_map["htm"] = "html";
+        ext_map["js"] = "javascript";
+        ext_map["json"] = "json";
+        ext_map["sql"] = "mysql";
+        
+        let version;
+        let content;
+        let loaded = false;
+        let Range = ace.require('ace/range').Range;
+
+        let cursors = {};
+
+        var editor = ace.edit("editor");
+        editor.setTheme("ace/theme/monokai");
+        editor.getSession().setMode("ace/mode/text");
+        editor.getSession().on('change', function(e) {
+            if(!loaded || typeof filename == 'undefined') return;
+            console.log(e.data);
+            switch(e.data.action) {
+                case "insertText":
+                    socket.emit('post', {version: version++, position: translatePosition(e.data.range.start), insert: e.data.text}, success_cb);
+                break;
+
+                case "removeText":
+                    socket.emit('post', {version: version++, position: translatePosition(e.data.range.start), remove: e.data.text.length}, success_cb);
+                break;
+
+                case "insertLines":
+                    var t = "";
+                    for(var i=0; i<e.data.lines.length; i++) t += e.data.lines[i]+"\n";
+                    socket.emit('post', {version: version++, position: translatePosition(e.data.range.start), insert: t}, success_cb);
+                break;
+
+                case "removeLines":
+                    var l = 0;
+                    for(var i=0; i<e.data.lines.length; i++) l += e.data.lines[i].length+1;
+                    socket.emit('post', {version: version++, position: translatePosition(e.data.range.start), remove: l}, success_cb);
+                break;
+            }
+        });
+        editor.getSession().selection.on('changeCursor', function(e) {
+            if(!loaded || typeof filename == 'undefined') return;
+            socket.emit('cursor', editor.selection.getCursor());
+        });
+
+        onload();
+        
+        
+
+        function onload() {
+            
+            myName =  prompt("사용자 명");
+            roomId = prompt("방 이름");
+            filename = roomId+".txt";
+            fileExt = "html"
+
+            for(var otheruser in cursors) {
+                if(!cursors.hasOwnProperty(otheruser)) continue;
+                editor.getSession().removeMarker(cursors[otheruser]);
+                delete cursors[otheruser];
+	        }
+
+            socket.emit('open',{
+                filename,
+                roomId,
+                userName:myName,
+            })
+        }
+
+        var success_cb = function(data) {
+            if(!data.success) {
+                console.error("Operation dropped", data);
+                document.getElementById("error").style.display = "block";
+                document.getElementById("error").innerHTML = "Operation dropped (TODO)<br>Please refresh";
+            } else version = data.version;
+        }
+
+        var translatePosition = function(pos) {
+            var p = 0;
+            for(var i=0; i<pos.row; i++) p += editor.getSession().getLine(i).length+1;
+            p += pos.column;
+            return p;
+        }
+
+        var translatePositionBack = function(pos) {
+            var p = {row: 0, column: 0};
+            for(var i=0; editor.getSession().getLine(i).length < pos; i++) {
+                p.row ++;
+                pos -= editor.getSession().getLine(i).length+1;
+            }
+            p.column = pos;
+            return p;
+        }
+
+        var applyOperation = function(operation)
+        {
+            loaded = false;
+            console.log(operation);
+            if(typeof operation.insert !== 'undefined') {
+                editor.getSession().insert(translatePositionBack(operation.position), operation.insert);
+            } else if(typeof operation.remove !== 'undefined') {
+                var start = translatePositionBack(operation.position);
+                var end = translatePositionBack(operation.position+operation.remove);
+                editor.getSession().remove(new Range(start.row, start.column, end.row, end.column));
+            }
+            version = operation.version+1;
+            loaded = true;
+        }
+
+        socket.on('open', function(data) {
+            loaded = false;
+            version = data.version;
+            content = data.content;
+            editor.getSession().setValue(content);
+
+            var ext = fileExt;
+            if(typeof ext !== 'undefined' && typeof ext_map[ext] !== 'undefined') {
+                editor.getSession().setMode("ace/mode/"+ext_map[ext]);
+            } else {
+                editor.getSession().setMode("ace/mode/text");
+            }
+            console.log("Editor started for file "+filename+" with document version "+version);
+            loaded = true;
+        });
+
+        socket.on('cursor', function(data) {
+            if(typeof cursors[data.user] !== "undefined")
+                editor.getSession().removeMarker(cursors[data.user]);
+            cursors[data.user] = editor.getSession().addMarker(new Range(data.cursor.row, data.cursor.column, data.cursor.row, data.cursor.column+1), "ace_cursor", data.user);
+        });
+        socket.on('cursorremove', function(user) {
+            if(typeof cursors[user] == 'undefined') return;
+            editor.getSession().removeMarker(cursors[user]);
+            delete cursors[user];
+        });
+        socket.on('disconnect', function() {
+            for(var otheruser in cursors) {
+                if(!cursors.hasOwnProperty(otheruser)) continue;
+                editor.getSession().removeMarker(cursors[otheruser]);
+                delete cursors[otheruser];
+            }
+        });
+
+        socket.on('operation', function(operation) {
+            applyOperation(operation);
+        });
+
+
+
+
+
+        
+    </script>
+</body>
+</html>
