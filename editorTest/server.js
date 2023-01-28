@@ -82,8 +82,8 @@ function setStorage(){
         fs.mkdirSync("./storage")
     }else{
         try {
-            fs.rmdirSync("./storage", { recursive: true });
-        
+            fs.rmSync("./storage", { recursive: true });
+            
             fs.mkdirSync("./storage")
         } catch (err) {
             console.error(`storage삭제 에러.`);
@@ -166,6 +166,7 @@ io.on('connection', function(socket) {
 	});
 
 	socket.on('disconnect', function() {
+        console.log(userName,"이 나감")
 		socket.broadcast.to(roomId).emit('cursorremove', userName);
 		try{
             delete cursors[roomId][userName];
