@@ -66,9 +66,11 @@ const pc_config = {
 }
 app.engine('html', require('ejs').renderFile);
 app.set('view engine', 'html');
+app.use('/', express.static(__dirname + '/' ));
 app.get('/', (request, response) => {
     response.render('./test.html');
 });
+
 
 
 
