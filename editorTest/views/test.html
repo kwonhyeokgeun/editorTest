@@ -18,7 +18,16 @@
         </div>
     </div>-->
     <div id="editor_container">
-        <div id="select-container"></div>
+        <div id="select-container">
+            <select id="select-ext">
+                <option value="text">text</option>
+                <option value="html">html</option>
+                <option value="javascript">javascript</option>
+                <option value="java">java</option>
+                <option value="python">python</option>
+                <option value="css">css</option>
+            </select>
+        </div>
 		<div id="editor" ></div>
 	</div>
 
@@ -71,15 +80,9 @@
         let roomId, myName, numOfUsers=0; 
         let filename;
 
-        let fileExt="html"
-        let ext_map = {};
-        ext_map["php"] = "php";
-        ext_map["html"] = "html";
-        ext_map["htm"] = "html";
-        ext_map["js"] = "javascript";
-        ext_map["json"] = "json";
-        ext_map["sql"] = "mysql";
-        
+        let fileExt="text"
+ 
+
         let version;
         let content;
         let loaded = false;
@@ -88,7 +91,7 @@
         let cursors = {};
 
         var editor = ace.edit("editor");
-        editor.setTheme("ace/theme/monokai");
+        editor.setTheme("ace/theme/idle_fingers");
         editor.getSession().setMode("ace/mode/text");
         editor.getSession().on('change', function(e) {
             if(!loaded || typeof filename == 'undefined') return;
@@ -129,7 +132,13 @@
             myName =  prompt("사용자 명");
             roomId = prompt("방 이름");
             filename = roomId+".txt";
-            fileExt = "html"
+
+            //코드 타입 SELECT
+            document.querySelector("#select-ext").addEventListener("change", function (){ 
+                fileExt = document.querySelector("#select-ext").value;
+                console.log("ext:",fileExt)
+                editor.getSession().setMode("ace/mode/"+fileExt);
+            });
 
             for(var otheruser in cursors) {
                 if(!cursors.hasOwnProperty(otheruser)) continue;
@@ -191,8 +200,8 @@
             editor.getSession().setValue(content);
 
             var ext = fileExt;
-            if(typeof ext !== 'undefined' && typeof ext_map[ext] !== 'undefined') {
-                editor.getSession().setMode("ace/mode/"+ext_map[ext]);
+            if(typeof ext !== 'undefined' && typeof ext !== 'undefined') {
+                editor.getSession().setMode("ace/mode/"+ext);
             } else {
                 editor.getSession().setMode("ace/mode/text");
             }
